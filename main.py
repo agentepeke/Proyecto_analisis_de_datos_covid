@@ -12,6 +12,11 @@ import mysql.connector
 from pymongo import MongoClient
 import pymongo
 import boto3
+import webbrowser
+from rpy2 import robjects
+from rpy2.robjects import pandas2ri
+from sqlalchemy import create_engine
+
 
 from insertar_mongo import InsertarMongo
 
@@ -56,6 +61,61 @@ conexion_SQL.conectar()
 #----------------------------------- INSERTAR EN MONGO
 #insercion_mongo = InsertarMongo(db_url, db_name, archivo_csv)
 #insercion_mongo.insertar_datos(limite=1000000)
+
+def generar_graficos_r():
+    # Conectar a la base de datos MySQL
+    engine = create_engine('mysql+pymysql://root:agentepeke@localhost/casos_covid')
+
+    # Gráfico 1: Distribución de casos por edad
+    query_age = "SELECT age, COUNT(*) AS case_count FROM covid_data GROUP BY age"
+    df_age = pd.read_sql(query_age, engine)
+
+    # top 10 edades
+    df_age = df_age.sort_values(by='case_count', ascending=False).head(10)
+
+    # Convertir DataFrame de pandas a objeto R
+    pandas2ri.activate()
+    r_df_age = pandas2ri.py2rpy(df_age)
+
+    # Gráfico de barras para distribución de casos por edad
+    robjects.r.assign("r_df_age", r_df_age)
+    robjects.r("""
+        barplot(r_df_age$case_count, names.arg=r_df_age$age, col="green", main="Top 10 Edades con más casos de COVID", xlab="Edad", ylab="Número de casos", las=2)
+    """)
+
+    input("Presiona ENTER para pasar a la siguiente gráfica...")
+
+    # Gráfico 2: Distribución de casos por ciudad
+    query_country = "SELECT country, COUNT(*) AS case_count FROM covid_data GROUP BY country"
+    df_country = pd.read_sql(query_country, engine)
+
+    # top 10 ciudades
+    df_country = df_country.sort_values(by='case_count', ascending=False).head(10)
+
+    # Convertir DataFrame de pandas a objeto R
+    r_df_country = pandas2ri.py2rpy(df_country)
+
+    # Gráfico de barras para distribución de casos por ciudad
+    robjects.r.assign("r_df_country", r_df_country)
+    robjects.r("""
+        barplot(r_df_country$case_count, names.arg=r_df_country$country, col="orange", main="Top 10 paises con más casos de COVID", xlab="Ciudad", ylab="Número de casos", las=2)
+    """)
+    input("PRECIONA ENTER PARA PASAR A LA SIGUIENTE GRAFICA...")
+    # Gráfico 3: Distribución de casos por género
+    query_sex = "SELECT sex, COUNT(*) AS case_count FROM covid_data GROUP BY sex"
+    df_sex = pd.read_sql(query_sex, engine)
+
+    # Convertir DataFrame de pandas a objeto R
+    r_df_sex = pandas2ri.py2rpy(df_sex)
+
+    # Gráfico de barras para distribución de casos por género
+    robjects.r.assign("r_df_sex", r_df_sex)
+    robjects.r("""
+        barplot(r_df_sex$case_count, names.arg=r_df_sex$sex, col="purple", main="Distribución de casos de COVID por Género", xlab="Género", ylab="Número de casos", las=2)
+    """)
+    input("PRECIONA ENTER PARA SALIR...")
+
+    pandas2ri.deactivate()
 
 def group_age(age):
     return age // 20 * 20
@@ -170,6 +230,12 @@ def show_mongodb_graph():
         plt.show()
     else:
         print("No se encontraron datos para graficar.")
+def abrir_url():
+    url = "http://localhost:8080/pentaho"
+    chrome_path = "C:\Program Files\Google\Chrome\Application\chrome.exe"  # Reemplaza con la ruta correcta
+    webbrowser.register('chrome', None, webbrowser.BackgroundBrowser(chrome_path))
+    webbrowser.get("chrome").open(url)
+
 
 # Crear la ventana principal
 root = tk.Tk()
@@ -186,6 +252,14 @@ show_buttonaws.pack()
 # Crear un botón para mostrar la gráfica
 show_button = ttk.Button(root, text='Mostrar Gráfica de los 5 Países con más Casos de MongoDB', command=show_mongodb_graph)
 show_button.pack()
+
+# Crear un botón
+boton = tk.Button(root, text="Abrir URL en Chrome", command=abrir_url)
+boton.pack(pady=20)
+
+ #Crear un botón para ejecutar el código en R
+r_button = ttk.Button(root, text='Generar Gráficos en R', command=generar_graficos_r)
+r_button.pack()
 
 # Iniciar la interfaz gráfica
 root.mainloop()
